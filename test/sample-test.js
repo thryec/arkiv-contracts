@@ -1,8 +1,17 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
-describe("Greeter", function () {
-  it("Should return the new greeting once it's changed", async function () {
+describe("NFT", function () {
+  [owner, minter, receiver] = await ethers.getSigners();
+
+  beforeEach(async () => {
+    const NFT = await ethers.getContractFactory("NFT");
+    nft = await NFT.deploy();
+    await nft.deployed();
+  });
+
+  describe("Deployment", async () => {});
+  it("set the owner as contract deployer", async () => {
     const Greeter = await ethers.getContractFactory("Greeter");
     const greeter = await Greeter.deploy("Hello, world!");
     await greeter.deployed();
