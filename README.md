@@ -1,15 +1,13 @@
-# Basic Sample Hardhat Project
+# ARKIV
 
-This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, a sample script that deploys that contract, and an example of a task implementation, which simply lists the available accounts.
+Smart Contracts for the ARKIV gallery and marketplace.
 
-Try running some of the following tasks:
+## NFT Contract
 
-```shell
-npx hardhat accounts
-npx hardhat compile
-npx hardhat clean
-npx hardhat test
-npx hardhat node
-node scripts/sample-script.js
-npx hardhat help
-```
+Deployed Contract Address on Rinkeby:
+0x0610a4B78355A6afab8A0Fdcdda5DDaBbF45F210
+
+## Marketplace Contract
+
+Deployed Contract Address on Rinkeby:
+0xbbAf0F46AE8ED62A5C5459b102991811e84710c9

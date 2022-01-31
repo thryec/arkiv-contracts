@@ -1,17 +1,18 @@
-require("@nomiclabs/hardhat-waffle");
-require("dotenv").config();
+require('@nomiclabs/hardhat-waffle')
+require('@nomiclabs/hardhat-web3')
+require('dotenv').config()
 
-task("accounts", "Prints the list of accounts", async (taskArgs, hre) => {
-  const accounts = await hre.ethers.getSigners();
+task('accounts', 'Prints the list of accounts', async (hre) => {
+  const accounts = await hre.ethers.getSigners()
 
   for (const account of accounts) {
-    console.log(account.address);
+    console.log(account.address)
   }
-});
+})
 
 module.exports = {
-  solidity: "0.8.4",
-  defaultNetwork: "hardhat",
+  solidity: '0.8.4',
+  defaultNetwork: 'hardhat',
   networks: {
     rinkeby: {
       url: process.env.STAGING_ALCHEMY_KEY,
@@ -23,4 +24,4 @@ module.exports = {
       accounts: [process.env.PRIVATE_KEY],
     },
   },
-};
+}
