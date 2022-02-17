@@ -4,6 +4,7 @@ pragma solidity ^0.8.0;
 
 import '@openzeppelin/contracts/interfaces/IERC2981.sol';
 import '@openzeppelin/contracts/utils/introspection/ERC165.sol';
+import 'hardhat/console.sol';
 
 /**
  * @dev Implementation of the NFT Royalty Standard, a standardized way to retrieve royalty payment information.
@@ -33,7 +34,13 @@ abstract contract ERC2981 is IERC2981, ERC165 {
   /**
    * @dev See {IERC165-supportsInterface}.
    */
-  function supportsInterface(bytes4 interfaceId) public view virtual override(IERC165, ERC165) returns (bool) {
+  function supportsInterface(bytes4 interfaceId)
+    public
+    view
+    virtual
+    override(IERC165, ERC165)
+    returns (bool)
+  {
     return interfaceId == type(IERC2981).interfaceId || super.supportsInterface(interfaceId);
   }
 
@@ -48,7 +55,13 @@ abstract contract ERC2981 is IERC2981, ERC165 {
   /**
    * @inheritdoc IERC2981
    */
-  function royaltyInfo(uint256 _tokenId, uint256 _salePrice) external view virtual override returns (address, uint256) {
+  function royaltyInfo(uint256 _tokenId, uint256 _salePrice)
+    public
+    view
+    virtual
+    override
+    returns (address, uint256)
+  {
     RoyaltyInfo memory royalty = _tokenRoyaltyInfo[_tokenId];
 
     if (royalty.receiver == address(0)) {

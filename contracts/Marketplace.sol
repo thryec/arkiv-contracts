@@ -21,7 +21,7 @@ contract Marketplace is ERC721Holder, Ownable, ReentrancyGuard {
     @notice Royalties charged by the marketplace 
     @dev Value set in constructor 
  */
-  uint256 public marketplaceFee;
+  uint256 public protocolFee;
 
   /// @notice maps itemId to Item struct
   mapping(uint256 => Item) private MarketItems;
@@ -56,7 +56,7 @@ contract Marketplace is ERC721Holder, Ownable, ReentrancyGuard {
  */
   constructor(uint256 fee) {
     marketplaceOwner = payable(msg.sender);
-    marketplaceFee = fee;
+    protocolFee = fee;
   }
 
   // ------------------ Mutative Functions ---------------------- //
@@ -101,9 +101,12 @@ contract Marketplace is ERC721Holder, Ownable, ReentrancyGuard {
     require(isForSale == true, 'Item requested is not for sale.');
     require(msg.value == salePrice, 'Please send the correct amount of ether.');
 
-    (address royaltyReceiver, uint256 royaltyAmount) = ERC2981(nftAddress).royaltyInfo(_tokenId, salePrice);
+    (address royaltyReceiver, uint256 royaltyAmount) = ERC2981(nftAddress).royaltyInfo(
+      _tokenId,
+      salePrice
+    );
 
-    uint256 feeToMarketplace = ((marketplaceFee * msg.value) / 10000);
+    uint256 feeToMarketplace = ((protocolFee * msg.value) / 10000);
     uint256 etherToSeller = msg.value - feeToMarketplace - royaltyAmount;
 
     IERC721(nftAddress).transferFrom(owner, msg.sender, _tokenId);
@@ -122,8 +125,8 @@ contract Marketplace is ERC721Holder, Ownable, ReentrancyGuard {
     }
   }
 
-  function updateMarketplaceFee(uint256 newFee) public onlyOwner {
-    marketplaceFee = newFee;
+  function updateProtocolFee(uint256 newFee) public onlyOwner {
+    protocolFee = newFee;
   }
 
   /**
@@ -137,15 +140,33 @@ contract Marketplace is ERC721Holder, Ownable, ReentrancyGuard {
   }
 
   function transferEther(address receiver, uint256 amount) internal {
-    // console.log('transfering', amount, 'to: ', receiver);
     (bool transferSuccess, ) = payable(receiver).call{ value: amount }('');
     require(transferSuccess, 'Failed to transfer royalties to marketplace.');
   }
 
   // ------------------ Read Functions ---------------------- //
 
-  function getItemById(uint256 _itemId) public view returns (Item memory) {
-    return MarketItems[_itemId];
+  function getItemsOwned() public view returns (Item[] memory) {
+    uint256 totalItemCount = _itemIds.current();
+    uint256 myItemsCount = 0;
+    uint256 resultItemId = 0;
+
+    for (uint256 i = 0; i < totalItemCount; i++) {
+      if (MarketItems[i].owner == msg.sender) {
+        myItemsCount++;
+      }
+    }
+
+    Item[] memory ownedItems = new Item[](myItemsCount);
+    for (uint256 i = 0; i < totalItemCount; i++) {
+      if (MarketItems[i].owner == msg.sender) {
+        uint256 thisItemId = MarketItems[i].itemId;
+        Item storage thisItem = MarketItems[thisItemId];
+        ownedItems[resultItemId] = thisItem;
+        resultItemId++;
+      }
+    }
+    return ownedItems;
   }
 
   function getListedItems() public view returns (Item[] memory) {
@@ -154,15 +175,15 @@ contract Marketplace is ERC721Holder, Ownable, ReentrancyGuard {
     uint256 resultItemId = 0;
 
     for (uint256 i = 0; i < totalItemCount; i++) {
-      if (MarketItems[i + 1].isListed == true) {
+      if (MarketItems[i].isListed == true) {
         itemsListedCount++;
       }
     }
 
     Item[] memory listedItems = new Item[](itemsListedCount);
     for (uint256 i = 0; i < totalItemCount; i++) {
-      if (MarketItems[i + 1].isListed == true) {
-        uint256 thisItemId = MarketItems[i + 1].itemId;
+      if (MarketItems[i].isListed == true) {
+        uint256 thisItemId = MarketItems[i].itemId;
         Item storage thisItem = MarketItems[thisItemId];
         listedItems[resultItemId] = thisItem;
         resultItemId++;
@@ -171,27 +192,8 @@ contract Marketplace is ERC721Holder, Ownable, ReentrancyGuard {
     return listedItems;
   }
 
-  function getItemsOwned() public view returns (Item[] memory) {
-    uint256 totalItemCount = _itemIds.current();
-    uint256 myItemsCount = 0;
-    uint256 resultItemId = 0;
-
-    for (uint256 i = 0; i < totalItemCount; i++) {
-      if (MarketItems[i + 1].owner == msg.sender) {
-        myItemsCount++;
-      }
-    }
-
-    Item[] memory ownedItems = new Item[](myItemsCount);
-    for (uint256 i = 0; i < totalItemCount; i++) {
-      if (MarketItems[i + 1].owner == msg.sender) {
-        uint256 thisItemId = MarketItems[i + 1].itemId;
-        Item storage thisItem = MarketItems[thisItemId];
-        ownedItems[resultItemId] = thisItem;
-        resultItemId++;
-      }
-    }
-    return ownedItems;
+  function getItemById(uint256 _itemId) public view returns (Item memory) {
+    return MarketItems[_itemId];
   }
 
   // ------------------ Modifiers ---------------------- //
