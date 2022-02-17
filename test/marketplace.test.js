@@ -5,7 +5,7 @@ const { ethers } = require('hardhat')
 describe('Marketplace', () => {
   let marketplace
   let nft
-  let marketplaceFee = ethers.BigNumber.from(250)
+  let protocolFee = ethers.BigNumber.from(250)
   let royaltyAmount = ethers.BigNumber.from(500)
   let salePrice = ethers.BigNumber.from(ethers.utils.parseEther('10'))
   const provider = ethers.provider
@@ -15,7 +15,7 @@ describe('Marketplace', () => {
   beforeEach(async () => {
     ;[contractOwner, seller, buyer] = await ethers.getSigners()
     const Marketplace = await ethers.getContractFactory('Marketplace')
-    marketplace = await Marketplace.deploy(marketplaceFee)
+    marketplace = await Marketplace.deploy(protocolFee)
     await marketplace.deployed()
 
     const NFT = await ethers.getContractFactory('NFT')
@@ -28,7 +28,7 @@ describe('Marketplace', () => {
       expect(await marketplace.owner()).to.equal(contractOwner.address)
     })
     it('sets the marketplace fee', async () => {
-      expect(await marketplace.marketplaceFee()).to.equal(marketplaceFee)
+      expect(await marketplace.protocolFee()).to.equal(protocolFee)
     })
   })
 
@@ -37,9 +37,7 @@ describe('Marketplace', () => {
     let itemId
     beforeEach(async () => {
       await nft.addToWhitelist(seller.address)
-      const token = await nft
-        .connect(seller)
-        .mint(seller.address, token1URI, seller.address, royaltyAmount)
+      const token = await nft.connect(seller).mint(seller.address, token1URI)
       const txn = await token.wait()
       tokenId = txn.events[0].args.tokenId
     })
@@ -63,15 +61,13 @@ describe('Marketplace', () => {
   describe('purchaseItem', () => {
     let tokenId
     let itemId
-    const feeToMarketplace = salePrice.mul(marketplaceFee).div(10000)
+    const feeToMarketplace = salePrice.mul(protocolFee).div(10000)
     const royaltyToCreator = salePrice.mul(royaltyAmount).div(10000)
     const revenueToSeller = salePrice.sub(feeToMarketplace).sub(royaltyToCreator)
 
     beforeEach(async () => {
       await nft.addToWhitelist(seller.address)
-      const token = await nft
-        .connect(seller)
-        .mint(seller.address, token1URI, seller.address, royaltyAmount)
+      const token = await nft.connect(seller).mint(seller.address, token1URI)
       let txn = await token.wait()
       tokenId = txn.events[0].args.tokenId
 
@@ -80,6 +76,7 @@ describe('Marketplace', () => {
       itemId = receipt.events[0].args.itemId
 
       await nft.connect(seller).setApprovalForAll(marketplace.address, true)
+      await nft.connect(seller).setTokenRoyalty(tokenId, royaltyAmount)
     })
 
     it('transfers token to buyer', async () => {
@@ -144,9 +141,7 @@ describe('Marketplace', () => {
     let itemId
     beforeEach(async () => {
       await nft.addToWhitelist(seller.address)
-      const token = await nft
-        .connect(seller)
-        .mint(seller.address, token1URI, seller.address, royaltyAmount)
+      const token = await nft.connect(seller).mint(seller.address, token1URI)
       let txn = await token.wait()
       tokenId = txn.events[0].args.tokenId
 
@@ -177,9 +172,7 @@ describe('Marketplace', () => {
     let newPrice = ethers.BigNumber.from(ethers.utils.parseEther('5'))
     beforeEach(async () => {
       await nft.addToWhitelist(seller.address)
-      const token = await nft
-        .connect(seller)
-        .mint(seller.address, token1URI, seller.address, royaltyAmount)
+      const token = await nft.connect(seller).mint(seller.address, token1URI)
       let txn = await token.wait()
       tokenId = txn.events[0].args.tokenId
 
@@ -200,17 +193,64 @@ describe('Marketplace', () => {
   })
 
   describe('Updating marketplace fees', () => {
-    let newMarketplaceFee = ethers.BigNumber.from(150)
+    let newProtocolFee = ethers.BigNumber.from(150)
     it('updates marketplace fees successfully', async () => {
-      await marketplace.updateMarketplaceFee(newMarketplaceFee)
-      expect(await marketplace.marketplaceFee()).to.equal(newMarketplaceFee)
+      await marketplace.updateProtocolFee(newProtocolFee)
+      expect(await marketplace.protocolFee()).to.equal(newProtocolFee)
     })
 
     it('reverts if caller is not owner of marketplace contract', async () => {
       await expectRevert(
-        marketplace.connect(seller).updateMarketplaceFee(newMarketplaceFee),
+        marketplace.connect(seller).updateProtocolFee(newProtocolFee),
         'Ownable: caller is not the owner'
       )
+    })
+  })
+
+  describe('Querying marketplace items', () => {
+    let tokenId1
+    let tokenId2
+    let itemId1
+    let itemId2
+    beforeEach(async () => {
+      await nft.addToWhitelist(seller.address)
+      let token = await nft.connect(seller).mint(seller.address, token1URI)
+      let txn = await token.wait()
+      tokenId1 = txn.events[0].args.tokenId
+
+      token = await nft.connect(seller).mint(seller.address, token1URI)
+      txn = await token.wait()
+      tokenId2 = txn.events[0].args.tokenId
+
+      txn = await marketplace.connect(seller).listItem(nft.address, tokenId1, salePrice)
+      let receipt = await txn.wait()
+      itemId1 = receipt.events[0].args.itemId
+
+      txn = await marketplace.connect(seller).listItem(nft.address, tokenId2, salePrice)
+      receipt = await txn.wait()
+      itemId2 = receipt.events[0].args.itemId
+    })
+
+    it('fetches item details using itemId ', async () => {
+      const item1 = await marketplace.getItemById(itemId1)
+      const item2 = await marketplace.getItemById(itemId2)
+      expect(item1.tokenId).to.equal(tokenId1)
+      expect(item2.tokenId).to.equal(tokenId2)
+    })
+
+    it('fetches all owned items ', async () => {
+      const items = await marketplace.connect(seller).getItemsOwned()
+      expect(items.length).to.equal(2)
+      expect(items[0].owner).to.equal(seller.address)
+      expect(items[1].owner).to.equal(seller.address)
+    })
+
+    it('fetches all listed items', async () => {
+      let items = await marketplace.connect(seller).getListedItems()
+      expect(items.length).to.equal(2)
+      await marketplace.connect(seller).delistItem(itemId1)
+      items = await marketplace.connect(seller).getListedItems()
+      expect(items.length).to.equal(1)
     })
   })
 })

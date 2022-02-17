@@ -44,9 +44,7 @@ describe('NFT', () => {
 
     beforeEach(async () => {
       await nft.addToWhitelist(minter.address)
-      const token = await nft
-        .connect(minter)
-        .mint(minter.address, token1URI, minter.address, royaltyAmount)
+      const token = await nft.connect(minter).mint(minter.address, token1URI)
       const txn = await token.wait()
       tokenId = txn.events[0].args.tokenId
     })
@@ -69,9 +67,14 @@ describe('NFT', () => {
 
     it('reverts on mint to null address', async () => {
       await nft.addToWhitelist(contractOwner.address)
+      await expectRevert(nft.mint(ZERO_ADDRESS, token1URI), 'ERC721: mint to the zero address')
+    })
+
+    it('reverts if tokenURI is an empty string', async () => {
+      const emptyURI = ''
       await expectRevert(
-        nft.mint(ZERO_ADDRESS, token1URI, ZERO_ADDRESS, royaltyAmount),
-        'ERC721: mint to the zero address'
+        nft.connect(minter).mint(minter.address, emptyURI),
+        'ERC721: tokenURI is empty'
       )
     })
   })
@@ -80,7 +83,7 @@ describe('NFT', () => {
     let tokenId
     beforeEach(async () => {
       await nft.addToWhitelist(contractOwner.address)
-      const token = await nft.mint(minter.address, token1URI, minter.address, royaltyAmount)
+      const token = await nft.mint(minter.address, token1URI)
       const txn = await token.wait()
       tokenId = txn.events[0].args.tokenId
     })
@@ -109,13 +112,13 @@ describe('NFT', () => {
   describe('Burning', async () => {
     let tokenId
     beforeEach(async () => {
-      await nft.addToWhitelist(contractOwner.address)
-      const token = await nft.mint(minter.address, token1URI, minter.address, royaltyAmount)
+      await nft.addToWhitelist(minter.address)
+      const token = await nft.connect(minter).mint(minter.address, token1URI)
       const txn = await token.wait()
       tokenId = txn.events[0].args.tokenId
     })
 
-    it('only allows token owner to burn tokens', async () => {
+    it('only allows token owner & creator to burn tokens', async () => {
       await nft.connect(minter).burn(tokenId)
       expect(await nft.balanceOf(minter.address)).to.equal(0)
     })
@@ -123,15 +126,18 @@ describe('NFT', () => {
     it('reverts if caller is not token owner', async () => {
       await expectRevert(nft.burn(tokenId), 'Caller is not the owner')
     })
+
+    it('reverts if caller is not token creator', async () => {
+      await nft.connect(minter).transferToken(minter.address, receiver.address, tokenId)
+      await expectRevert(nft.connect(receiver).burn(tokenId), 'Caller is not the creator')
+    })
   })
 
   describe('Updating token URI', async () => {
     let tokenId
     beforeEach(async () => {
       await nft.addToWhitelist(minter.address)
-      const token = await nft
-        .connect(minter)
-        .mint(minter.address, token1URI, minter.address, royaltyAmount)
+      const token = await nft.connect(minter).mint(minter.address, token1URI)
       const txn = await token.wait()
       tokenId = txn.events[0].args.tokenId
     })
@@ -164,38 +170,41 @@ describe('NFT', () => {
     let tokenId
     beforeEach(async () => {
       await nft.addToWhitelist(minter.address)
-      const token = await nft
-        .connect(minter)
-        .mint(minter.address, token1URI, minter.address, royaltyAmount)
+      const token = await nft.connect(minter).mint(minter.address, token1URI)
       const txn = await token.wait()
       tokenId = txn.events[0].args.tokenId
     })
 
-    it('sets royalty for specific token upon mint', async () => {
+    it('allows creator to set token royalties', async () => {
+      await nft.connect(minter).setTokenRoyalty(tokenId, royaltyAmount)
       const txn = await nft.royaltyInfo(tokenId, salePrice)
       const expectedRoyalty = royaltyAmount.mul(salePrice).div(10000)
-      expect(txn.receiver).to.equal(minter.address)
-      expect(txn.royaltyAmount).to.equal(expectedRoyalty)
+      expect(txn[0]).to.equal(minter.address)
+      expect(txn[1]).to.equal(expectedRoyalty)
     })
 
     it('allows creator to update token royalties', async () => {
-      await nft.connect(minter).updateTokenRoyalty(tokenId, newRoyaltyAmount)
+      await nft.connect(minter).setTokenRoyalty(tokenId, newRoyaltyAmount)
       const expectedRoyalty = newRoyaltyAmount.mul(salePrice).div(10000)
-      const info = await nft.royaltyInfo(tokenId, salePrice)
-      expect(info.royaltyAmount).to.equal(expectedRoyalty)
+      const txn = await nft.royaltyInfo(tokenId, salePrice)
+      expect(txn[1]).to.equal(expectedRoyalty)
+    })
+
+    it('reverts if anyone other than the creator tries to set token royalties', async () => {
+      await expectRevert(nft.setTokenRoyalty(tokenId, royaltyAmount), 'Caller is not the creator')
     })
 
     it('reverts if anyone other than the creator tries to change token royalties', async () => {
       await expectRevert(
-        nft.updateTokenRoyalty(tokenId, newRoyaltyAmount),
+        nft.setTokenRoyalty(tokenId, newRoyaltyAmount),
         'Caller is not the creator'
       )
     })
 
     it('reverts if royalty amount is >10000', async () => {
       await expectRevert(
-        nft.connect(minter).updateTokenRoyalty(tokenId, 10001),
-        'ERC2981Royalties: Too high'
+        nft.connect(minter).setTokenRoyalty(tokenId, 10001),
+        'ERC2981: royalty fee will exceed salePrice'
       )
     })
   })
@@ -208,7 +217,7 @@ describe('NFT', () => {
     })
     it('allows anyone to mint when whitelist is disabled', async () => {
       await nft.enableWhitelist(false)
-      await nft.connect(minter).mint(minter.address, token1URI, minter.address, royaltyAmount)
+      await nft.connect(minter).mint(minter.address, token1URI)
     })
 
     it('allows contract owner to add addresses to the whitelist', async () => {
@@ -251,6 +260,39 @@ describe('NFT', () => {
         nft.connect(minter).removeFromWhitelist(whitelistAdd1.address),
         'Ownable: caller is not the owner'
       )
+    })
+  })
+
+  describe('Enumerable', () => {
+    let tokenId1
+    let tokenId2
+
+    beforeEach(async () => {
+      await nft.addToWhitelist(minter.address)
+      let token = await nft.connect(minter).mint(minter.address, token1URI)
+      let txn = await token.wait()
+      tokenId1 = txn.events[0].args.tokenId
+
+      token = await nft.connect(minter).mint(minter.address, token2URI)
+      txn = await token.wait()
+      tokenId2 = txn.events[0].args.tokenId
+    })
+
+    it('returns total token supply', async function () {
+      const supply = await nft.totalSupply()
+      expect(supply).to.equal('2')
+    })
+
+    it('returns tokens owned by address', async function () {
+      const supply = await nft.totalSupply()
+      const totalSupply = supply.toNumber()
+      const ownerTokens = []
+      for (let i = 0; i < totalSupply; i++) {
+        const owner = await nft.ownerOf(i)
+        if (owner === minter.address) {
+          ownerTokens.push(i)
+        }
+      }
     })
   })
 })
